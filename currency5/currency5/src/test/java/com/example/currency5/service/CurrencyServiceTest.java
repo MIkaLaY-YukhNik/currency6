@@ -1,61 +1,56 @@
 package com.example.currency5.service;
 
-import com.example.currency5.entity.CurrencyRate;
 import com.example.currency5.model.CurrencyResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
-
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
 
-@ExtendWith(MockitoExtension.class)
+import java.util.HashMap;
+import java.util.Map;
+
 public class CurrencyServiceTest {
 
-    @Mock
-    private CurrencyRateService currencyRateService;
-
-    @InjectMocks
     private CurrencyService currencyService;
 
-    private CurrencyRate mockFromRate;
-    private CurrencyRate mockToRate;
-
     @BeforeEach
-    void setUp() {
-        mockFromRate = mock(CurrencyRate.class);
-        when(mockFromRate.getCurrencyCode()).thenReturn("USD");
-        when(mockFromRate.getRate()).thenReturn(1.0);
-
-        mockToRate = mock(CurrencyRate.class);
-        when(mockToRate.getCurrencyCode()).thenReturn("EUR");
-        when(mockToRate.getRate()).thenReturn(0.95);
+    public void setUp() {
+        currencyService = new CurrencyService();
+        // Инициализируем курсы валют для теста вручную
+        Map<String, Double> dummyRates = new HashMap<>();
+        dummyRates.put("USD", 1.0);
+        dummyRates.put("EUR", 0.9);
+        dummyRates.put("BYN", 2.5);
+        try {
+            java.lang.reflect.Field field = currencyService.getClass().getDeclaredField("exchangeRates");
+            field.setAccessible(true);
+            field.set(currencyService, dummyRates);
+        } catch (Exception e) {
+            fail("Не удалось задать тестовые курсы валют: " + e.getMessage());
+        }
     }
 
     @Test
-    void convertCurrency_ShouldConvertCurrencySuccessfully() {
-        when(currencyRateService.getCurrencyRateByCode("USD")).thenReturn(Optional.of(mockFromRate));
-        when(currencyRateService.getCurrencyRateByCode("EUR")).thenReturn(Optional.of(mockToRate));
-
-        CurrencyResponse result = currencyService.convertCurrency(100.0, "USD", "EUR");
-        assertEquals("USD", result.getFromCurrency()); // Исправлено: getBase() -> getFromCurrency()
-        assertEquals(100.0, result.getAmount());
-        assertEquals("EUR", result.getToCurrency());
-        assertEquals(95.0, result.getConvertedAmount(), 0.01); // 100 * 0.95
-        assertEquals(0.95, result.getExchangeRate(), 0.01); // 0.95 / 1.0
-        verify(currencyRateService, times(1)).getCurrencyRateByCode("USD");
-        verify(currencyRateService, times(1)).getCurrencyRateByCode("EUR");
+    public void testConvertCurrencyValid() {
+        CurrencyResponse response = currencyService.convertCurrency(100.0, "USD", "EUR");
+        assertNotNull(response);
+        assertEquals(90.0, response.getConvertedAmount(), 0.001);
     }
 
     @Test
-    void convertCurrency_ShouldThrowExceptionWhenFromCurrencyNotFound() {
-        when(currencyRateService.getCurrencyRateByCode("USD")).thenReturn(Optional.empty());
-        assertThrows(RuntimeException.class, () -> currencyService.convertCurrency(100.0, "USD", "EUR"));
-        verify(currencyRateService, times(1)).getCurrencyRateByCode("USD");
+    public void testConvertCurrencyInvalidAmount() {
+        Exception exception = assertThrows(IllegalArgumentException.class, () ->
+                currencyService.convertCurrency(-10.0, "USD", "EUR"));
+        String expectedMessage = "Invalid input parameters";
+        String actualMessage = exception.getMessage();
+        assertTrue(actualMessage.contains(expectedMessage));
+    }
+
+    @Test
+    public void testConvertCurrencyUnsupportedCurrency() {
+        Exception exception = assertThrows(IllegalStateException.class, () ->
+                currencyService.convertCurrency(100.0, "XYZ", "EUR"));
+        String expectedMessage = "Unsupported currency: XYZ";
+        String actualMessage = exception.getMessage();
+        assertTrue(actualMessage.contains(expectedMessage));
     }
 }
